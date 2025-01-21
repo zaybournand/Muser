@@ -29,34 +29,10 @@ class User(db.Model, UserMixin):
     password = db.Column(db.String(120), nullable=False)
     user_type = db.Column(db.String(120), nullable=False)
 
-class Opportunity(db.Model):
-    __tablename__ = 'opportunities'
-
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(120), nullable=False)
-    description = db.Column(db.Text, nullable=False)
-    location = db.Column(db.String(120), nullable=False)
-    date_posted = db.Column(db.DateTime, default=datetime.utcnow)
-    professional_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-
-    professional = db.relationship('User', backref='posted_opportunities', lazy=True)
 
     def __repr__(self):
         return f"<Opportunity {self.title}, posted by {self.professional_id}>"
 
-class Application(db.Model):
-    __tablename__ = 'applications'
-
-    id = db.Column(db.Integer, primary_key=True)
-    opportunity_id = db.Column(db.Integer, db.ForeignKey('opportunities.id'), nullable=False)
-    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    status = db.Column(db.String(50), default="Pending")
-
-    opportunity = db.relationship('Opportunity', backref='applications', lazy=True)
-    student = db.relationship('User', backref='applied_opportunities', lazy=True)
-
-    def __repr__(self):
-        return f"<Application by User {self.student_id} for Opportunity {self.opportunity_id} with status {self.status}>"
 
 
 @app.route('/application_status/<int:id>', methods=['GET', 'POST'])
@@ -112,46 +88,7 @@ def profile_update():
 
     return render_template('profile.html', user=user_update)  
 
-@app.route('/search_opportunities', methods=['GET', 'POST'])
-@login_required
-def search_opportunities():
-    keyword = request.args.get('keyword')  
-    location = request.args.get('location')  
-    
-    
-    query = Opportunity.query
-    if keyword:
-        query = query.filter(Opportunity.title.like(f'%{keyword}%') | Opportunity.description.like(f'%{keyword}%'))
-    if location:
-        query = query.filter(Opportunity.location.like(f'%{location}%'))
-    
-    opportunities = query.all()  
 
-    return render_template('search_results.html', opportunities=opportunities, keyword=keyword, location=location)
-
-@app.route('/apply', methods=['POST'])
-@login_required
-def apply():
-    opportunity_id = request.form['opportunity_id']
-    if current_user.user_type != 'student':
-        flash("Only students can apply for opportunities.", "danger")
-        return redirect(url_for('view_opportunities'))
-    
-    existing_application = Application.query.filter_by(opportunity_id=opportunity_id, student_id=current_user.id).first()
-    if existing_application:
-        flash("You have already applied for this opportunity.", "warning")
-        return redirect(url_for('view_opportunities'))
-    new_application = Application(opportunity_id=opportunity_id,student_id=current_user.id)
-
-    try:
-        db.session.add(new_application)
-        db.session.commit()
-        flash("Application successfully submitted!", "success")
-        return redirect(url_for('view_opportunities'))
-        
-    except Exception as e:
-        flash(f"There was an error applying: {e}", "danger")
-        return redirect('view_opportunities')
     
 @app.route('/view_applications/<int:opportunity_id>', methods=['GET'])
 @login_required
@@ -169,24 +106,7 @@ def view_application(opportunity_id):
 
 
 
-@app.route('/add_opportunity', methods=['POST'])
-@login_required
-def add_opportunity(id):
-    title = request.form['title']
-    description = request.form['description']
-    location = request.form['location']
-    
-    
-    new_opportunitiy = Opportunity(title=title, description=description, location=location,  professional_id=current_user.id )
-    try:
-        db.session.add(new_opportunitiy)
-        db.session.commit()
-        flash("Opportunity added successfully!", "success")
-        return redirect('/')
-    
-    except Exception as e:
-        flash(f"There was an error creating opportunity: {e}", "danger")
-        return redirect('/')
+
 
 @app.route('/delete/<int:id>')
 @login_required
@@ -203,41 +123,6 @@ def delete(id):
     except Exception as e:
         flash(f"There was an error deleting the opportunity: {e}", "danger")
         return redirect('/')
-@app.route('/edit/<int:id>', methods=['GET', 'POST'])
-@login_required
-def edit(id):
-    opportunity_to_edit = Opportunity.query.get_or_404(id)
-
-    
-    if opportunity_to_edit.professional_id != current_user.id:
-        flash("You are not authorized to edit this opportunity.", "danger")
-        return redirect(url_for('index'))
-
-    if request.method == 'POST':
-       
-        opportunity_to_edit.title = request.form['title']
-        opportunity_to_edit.description = request.form['description']
-        opportunity_to_edit.location = request.form['location']
-
-        try:
-            db.session.commit()
-            flash("Opportunity updated successfully!", "success")
-            return redirect(url_for('index'))
-        except Exception as e:
-            flash(f"There was an error updating the opportunity: {e}", "danger")
-            return redirect(url_for('index'))
-
-    
-    return render_template('edit_opportunity.html', opportunity=opportunity_to_edit)
-
-
-@app.route('/view_opportunity', methods=['GET'])
-@login_required
-def view_opportunity():
-    opportunities = Opportunity.query.all()
-
-    return render_template('opportunities.html', opportunities=opportunities)
-
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
